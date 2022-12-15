@@ -3,6 +3,7 @@
 /test-reports/
 junit.xml
 /coverage/
+permissions-backup.acl
 /.mergify.yml
 /test/
 /tsconfig.dev.json
@@ -18,5 +19,6 @@ dist
 /.projenrc.js
 tsconfig.tsbuildinfo
 /.eslintrc.json
+!/assets/
 cdk.out/
 .cdk.staging/
