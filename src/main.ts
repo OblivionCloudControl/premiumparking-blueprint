@@ -1,10 +1,11 @@
 import {
-  App, Stack, StackProps, IAspect, TagManager, ITaggable, Aspects,
+  App, Stack, StackProps, IAspect, TagManager, ITaggable, Aspects, RemovalPolicy, CfnOutput,
   aws_ec2 as ec2,
   aws_ecs as ecs,
   aws_ecs_patterns as ecsPatterns,
   aws_secretsmanager as secretsmanager,
-  RemovalPolicy,
+  aws_cloudfront as cloudfront,
+  aws_cloudfront_origins as origins,
 } from 'aws-cdk-lib';
 
 import { Construct, IConstruct } from 'constructs';
@@ -57,22 +58,25 @@ export class MyApp extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const cluster = new ecs.Cluster(this, 'FargateCluster', { vpc });
     const loadBalancedFargateService = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'Service', {
-      cluster,
       memoryLimitMiB: 1024,
       cpu: 512,
       taskImageOptions: {
         image: props.containerImage,
         secrets: {
-          SECRET: ecs.Secret.fromSecretsManager(secret),
+          SAMPLE_SECRET: ecs.Secret.fromSecretsManager(secret),
         },
       },
+      vpc: vpc,
       taskSubnets: {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
       },
       publicLoadBalancer: true,
       propagateTags: ecs.PropagatedTagSource.SERVICE,
+      runtimePlatform: {
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+      },
     });
     loadBalancedFargateService.targetGroup.configureHealthCheck({
       path: '/',
@@ -92,6 +96,19 @@ export class MyApp extends Stack {
       targetUtilizationPercent: 50,
     });
 
+    const distribution = new cloudfront.Distribution(this, 'Distribution', {
+      defaultBehavior: {
+        origin: new origins.LoadBalancerV2Origin(loadBalancedFargateService.loadBalancer, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+        }),
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+    });
+
+    new CfnOutput(this, 'ServiceDistributionDomainName', { value: distribution.distributionDomainName });
+    new CfnOutput(this, 'ServiceDistributionId', { value: distribution.distributionId });
   }
 }
 
