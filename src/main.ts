@@ -69,7 +69,7 @@ export class MyApp extends Stack {
       enforceSSL: true,
     });
     NagSuppressions.addResourceSuppressions(loadBalancingLoggingBucket, [
-      { id: 'AwsSolutions-S1', reason: 'No server access logs for this access logs bucket' },
+      { id: 'AwsSolutions-S1', reason: 'No S3 server access logs for this access logs bucket' },
     ]);
 
     const loadBalancedFargateService = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'Service', {
@@ -118,6 +118,16 @@ export class MyApp extends Stack {
       targetUtilizationPercent: 50,
     });
 
+    const distributionLoggingBucket = new s3.Bucket(this, 'DistributionLogs', {
+      removalPolicy: RemovalPolicy.DESTROY,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.KMS_MANAGED,
+      enforceSSL: true,
+    });
+    NagSuppressions.addResourceSuppressions(distributionLoggingBucket, [
+      { id: 'AwsSolutions-S1', reason: 'No S3 server access logs for this access logs bucket' },
+    ]);
+
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       defaultBehavior: {
         origin: new origins.LoadBalancerV2Origin(loadBalancedFargateService.loadBalancer, {
@@ -127,12 +137,12 @@ export class MyApp extends Stack {
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      logBucket: distributionLoggingBucket,
     });
     NagSuppressions.addResourceSuppressions(distribution, [
       { id: 'AwsSolutions-CFR1', reason: 'No Geo restriction in this demo' },
       { id: 'AwsSolutions-CFR2', reason: 'No WAF in this demo' },
-      { id: 'AwsSolutions-CFR3', reason: 'No access logs in this demo' },
-      { id: 'AwsSolutions-CFR4', reason: 'Deprecated protols cannot be disabled using the default distribution' },
+      { id: 'AwsSolutions-CFR4', reason: 'Deprecated protocols cannot be disabled using the default distribution' },
       { id: 'AwsSolutions-CFR5', reason: 'Plain-text HTTP towards the origin in this demo' },
     ], true);
 
