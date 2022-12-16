@@ -2,12 +2,13 @@ import {
   App, Stack, StackProps, IAspect, TagManager, ITaggable, Aspects, RemovalPolicy, CfnOutput,
   aws_ec2 as ec2,
   aws_ecs as ecs,
+  aws_s3 as s3,
   aws_ecs_patterns as ecsPatterns,
   aws_secretsmanager as secretsmanager,
   aws_cloudfront as cloudfront,
   aws_cloudfront_origins as origins,
 } from 'aws-cdk-lib';
-
+import { AwsSolutionsChecks, NagSuppressions } from 'cdk-nag';
 import { Construct, IConstruct } from 'constructs';
 
 type Tags = { [key: string]: string } & {
@@ -57,6 +58,19 @@ export class MyApp extends Stack {
     const secret = new secretsmanager.Secret(this, 'TaskSecret', {
       removalPolicy: RemovalPolicy.DESTROY,
     });
+    NagSuppressions.addResourceSuppressions(secret, [
+      { id: 'AwsSolutions-SMG4', reason: 'No rotation in this demo' },
+    ], true);
+
+    const loadBalancingLoggingBucket = new s3.Bucket(this, 'LoadBalancerLogs', {
+      removalPolicy: RemovalPolicy.DESTROY,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.KMS_MANAGED,
+      enforceSSL: true,
+    });
+    NagSuppressions.addResourceSuppressions(loadBalancingLoggingBucket, [
+      { id: 'AwsSolutions-S1', reason: 'No server access logs for this access logs bucket' },
+    ]);
 
     const loadBalancedFargateService = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'Service', {
       memoryLimitMiB: 1024,
@@ -81,6 +95,14 @@ export class MyApp extends Stack {
     loadBalancedFargateService.targetGroup.configureHealthCheck({
       path: '/',
     });
+    loadBalancedFargateService.loadBalancer.logAccessLogs(loadBalancingLoggingBucket);
+
+    NagSuppressions.addResourceSuppressions(loadBalancedFargateService.loadBalancer, [
+      { id: 'AwsSolutions-EC23', reason: 'Allow open security groups' },
+    ], true);
+    NagSuppressions.addResourceSuppressions(loadBalancedFargateService.cluster, [
+      { id: 'AwsSolutions-ECS4', reason: 'No CloudWatch Container Insights in this demo' },
+    ]);
 
 
     const scalableTarget = loadBalancedFargateService.service.autoScaleTaskCount({
@@ -106,6 +128,13 @@ export class MyApp extends Stack {
       },
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
     });
+    NagSuppressions.addResourceSuppressions(distribution, [
+      { id: 'AwsSolutions-CFR1', reason: 'No Geo restriction in this demo' },
+      { id: 'AwsSolutions-CFR2', reason: 'No WAF in this demo' },
+      { id: 'AwsSolutions-CFR3', reason: 'No access logs in this demo' },
+      { id: 'AwsSolutions-CFR4', reason: 'Deprecated protols cannot be disabled using the default distribution' },
+      { id: 'AwsSolutions-CFR5', reason: 'Plain-text HTTP towards the origin in this demo' },
+    ], true);
 
     new CfnOutput(this, 'ServiceDistributionDomainName', { value: distribution.distributionDomainName });
     new CfnOutput(this, 'ServiceDistributionId', { value: distribution.distributionId });
@@ -134,5 +163,6 @@ appAspects.add(new ApplyTags({
   'owner': 'Premium Parking',
   'map-migrated': 'd-server-tbd',
 }));
+appAspects.add(new AwsSolutionsChecks({ verbose: true }));
 
 app.synth();
