@@ -1,6 +1,6 @@
 const { awscdk } = require('projen');
 const project = new awscdk.AwsCdkTypeScriptApp({
-  cdkVersion: '2.55.1',
+  cdkVersion: '2.64.0',
   defaultReleaseBranch: 'main',
   name: 'premiumparking-blueprint',
   vscode: true,
@@ -10,6 +10,7 @@ const project = new awscdk.AwsCdkTypeScriptApp({
   deps: [
     'cdk-nag',
   ],
+  github: false,
 
   // cdkDependencies: undefined,  /* Which AWS CDK modules (those that start with "@aws-cdk/") this app uses. */
   // deps: [],                    /* Runtime dependencies of this module. */
